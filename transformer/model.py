@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -54,7 +55,7 @@ class OptionTransformer(nn.Module):
     def forward(self, X, mask=None):
         # 先卷积+池化
         X_conv = self.conv(X)  # (n*D,N,1)
-        X_input = X_conv.squeeze(2)  # (n*D,N)
+        X_input = torch.transpose(X_conv.squeeze(2), 0, 1)  # (N,n*D)
 
         # 再transformer
         # TODO不知道是否需要mask
