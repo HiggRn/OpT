@@ -31,7 +31,6 @@ def simulate(S_0, mu, sigma, rho, D, N):
 
 
 if __name__ == "__main__":
-    print("testing...")
     S_0 = np.array([2.0, 4.0])
     mu = np.array([0.5, 1.0])
     sigma = np.array([1.0, 4.0])

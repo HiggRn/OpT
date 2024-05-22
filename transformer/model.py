@@ -4,13 +4,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-# 输入数据X:(2*D,N,M)，其中N表示期限，M表示Monte Carlo模拟次数，D为资产数
+# 输入数据X:(D,N,M)，其中N表示期限，M表示Monte Carlo模拟次数，D为资产数（包含期权的模拟收益）
 class OptionTransformer(nn.Module):
     def __init__(
         self, d_conv, d_model, n_layers, n_head, n_assets, n_mcmc, dropout
     ) -> None:
         super().__init__()
-        self.d_conv = d_conv  # 即是n
+        self.d_conv = d_conv  # 即是n，表示我们想从M次模拟中提取出多少特征
         self.d_model = d_model  # 即是m
         self.n_head = n_head  # 即是h
         self.n_assets = n_assets  # 即是D
@@ -20,7 +20,7 @@ class OptionTransformer(nn.Module):
         # 然后经过一个池化层变为(n*D,N,1)，压为(n*D,N)
         self.conv = nn.Sequential(
             nn.Conv2d(
-                in_channels=2 * n_assets, out_channels=d_conv * n_assets, kernel_size=1
+                in_channels=n_assets, out_channels=d_conv * n_assets, kernel_size=1
             ),
             nn.MaxPool2d(kernel_size=3, stride=(1, n_mcmc), padding=1, dilation=1),
         )
