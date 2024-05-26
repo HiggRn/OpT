@@ -1,4 +1,4 @@
-# Zhang Yuxiang, 2021/5/26
+# Zhang Yuxiang, 2024/5/26
 # 尝试利用百分位数这样的统计信息对M进行降维
 
 
@@ -11,7 +11,7 @@ import torch.nn.functional as F
 # 输入数据X:(D,N,M)，其中N表示期限，M表示Monte Carlo模拟次数，D为资产数（包含期权的模拟收益）
 class OptionTransformer(nn.Module):
     def __init__(
-        self, d_model, n_layers, n_head, n_assets, n_mcmc, dropout, n_features = 100
+        self, d_model, n_layers, n_head, n_assets, n_mcmc, dropout, n_features=100
     ) -> None:
         super().__init__()
         self.n_features = n_features  # 即是n，表示我们想从M次模拟中提取出多少特征（本模型使用百分位数）
@@ -48,13 +48,15 @@ class OptionTransformer(nn.Module):
         )
 
     def forward(self, X, mask=None):
-        
-        # Zhang Yuxiang, 2021/5/26
+        # Zhang Yuxiang, 2024/5/26
         # 先对M维度上的数据排序，然后取百分位数
-        X_sorted, _ = torch.sort(X, dim=2, descending=True)
-        indices = torch.linspace(0, self.n_mcmc - 1, steps=self.n_features).long()
-        X_selected = X_sorted[:, :, indices]
-        X_input = X_selected.view(X_selected.size(0), -1) # (N,n*D)
+        # Zijie Gu, 2024/5/26
+        # Modified using torch.quantile()
+        q = torch.linspace(0, self.n_mcmc - 1, steps=self.n_features)
+        q /= self.n_mcmc  # calculate quantiles
+        X_quantiles = torch.quantile(X, q, dim=2, keepdim=False)  # (n,N,D)
+        X_quantiles = torch.transpose(X_quantiles, 0, 1)  # (N,n,D)
+        X_input = torch.flatten(X_quantiles, 1, 2)
 
         # 再transformer
         # TODO不知道是否需要mask
