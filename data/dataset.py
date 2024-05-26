@@ -1,6 +1,6 @@
 # Construct the dataset for training
 import numpy as np
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 
 from monte_carlo.monte_carlo import simulate
 
@@ -8,7 +8,7 @@ from monte_carlo.monte_carlo import simulate
 class OptionDataset(Dataset):
     def __init__(self, data, option, M) -> None:
         """
-        :param data: list[dict{"S_0":list[float]"mu":list[float],"sigma":list[float],"rho":list[list[float]],"r":float,"option_prices":list[float]}]
+        :param data: list[dict{"S_0":list[float]"mu":list[float],"sigma":list[float],"rho":list[list[float]],"r":float,"T":float,"option_prices":list[float]}]
         :param options: Callable[ndarray[float]],float], function to calculate the option payoff, given the prices of assets
         :param M: int, number of Monte-Carlo simulations
         """
@@ -23,11 +23,12 @@ class OptionDataset(Dataset):
             option_prices = np.array(sample["option_prices"])
             D = len(S_0)
             N = len(option_prices)
+            T = sample["T"]
 
             # Simulation
             simulated_data = []
             for _ in range(M):
-                simulated = simulate(S_0, mu, sigma, rho, D, N)
+                simulated = simulate(S_0, mu, sigma, rho, D, N, T)
                 option_payoff = np.apply_along_axis(option, 0, simulated)
                 simulated = np.vstack((simulated, option_payoff))
                 simulated_data.append(simulated)
@@ -49,6 +50,7 @@ if __name__ == "__main__":
         "rho": [[1.0, 0.0], [0.0, 1.0]],
         "option_prices": range(1, 11),
         "r": 0.05,
+        "T": 1.0,
     }
     test_dataset = OptionDataset([data], lambda S: max(0, S[0] - S[1]), 15)
     print(test_dataset.data)
