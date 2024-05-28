@@ -42,6 +42,11 @@ class OptionDataset(Dataset):
         return self.data[index]
 
 
+def simulate_option(option, S_0, mu, sigma, rho, T, N, M, r) -> OptionDataset:
+    # TODO
+    pass
+
+
 if __name__ == "__main__":
     data = {
         "S_0": [2.0, 4.0],
