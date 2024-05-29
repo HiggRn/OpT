@@ -20,32 +20,39 @@ class OptionTransformer(nn.Module):
         self.n_assets = n_assets  # 即是D
         self.n_mcmc = n_mcmc  # 即是M
 
-        # 然后Transformer: Decoder only，输出(N,h*m)
-        decoder_layers = nn.TransformerDecoderLayer(
-            d_model=d_model,
+        # 然后Transformer: Encoder only，输出(N,h*n*D)
+        encoder_layers = nn.TransformerEncoderLayer(
+            d_model=n_features * (n_assets + 1),
             nhead=n_head,
             dropout=dropout,
             activation=F.gelu,  # TODO可能ReLU会更好？不知道
             batch_first=True,
         )
-        self.transformer = nn.TransformerDecoder(
-            decoder_layer=decoder_layers, num_layers=n_layers
+        self.transformer = nn.TransformerEncoder(
+            encoder_layer=encoder_layers, num_layers=n_layers
         )
 
         # 最后swish+sigmoid/softplus
         self.price = nn.Sequential(
-            nn.Linear(d_model, d_model),
+            nn.Linear(n_features * (n_assets + 1), d_model),
             nn.SiLU(),
             nn.Linear(d_model, 1),
             nn.Softplus(),
         )
 
         self.delta = nn.Sequential(
-            nn.Linear(d_model, d_model),
+            nn.Linear(n_features * (n_assets + 1), d_model),
             nn.SiLU(),
-            nn.Linear(d_model, 1),
+            nn.Linear(d_model, n_assets),
             nn.Sigmoid(),
         )
+
+    def init_weights(self):
+        for name, param in self.named_parameters():
+            if "weight" in name:
+                nn.init.kaiming_normal_(param)
+            elif "bias" in name:
+                nn.init.constant_(param, 0)
 
     def forward(self, X, mask=None):
         # Zhang Yuxiang, 2024/5/26
@@ -56,19 +63,20 @@ class OptionTransformer(nn.Module):
         q /= self.n_mcmc  # calculate quantiles
         X_quantiles = torch.quantile(X, q, dim=2, keepdim=False)  # (n,N,D)
         X_quantiles = torch.transpose(X_quantiles, 0, 1)  # (N,n,D)
-        X_input = torch.flatten(X_quantiles, 1, 2)
+        X_input = torch.flatten(X_quantiles, 1, 2)  # (N,n*D)
 
         # 再transformer
         # TODO不知道是否需要mask
         # 暂时先弄一个mask吧
         if mask is None:
-            mask = nn.Transformer.generate_square_subsequent_mask(self.d_model)
+            mask = nn.Transformer.generate_square_subsequent_mask(X_input.size()[0])
         X_hidden = self.transformer(X_input, mask)  # (N,m)
 
         # 然后分别通过线性层
         # TODO与某个线性衰减的成分线性组合
-        price_hat = self.price(X_hidden)  # (N)
-        delta_hat = self.delta(X_hidden)  # (N)
+        price_hidden = self.price(X_hidden)  # (N)
+        delta_hidden = self.delta(X_hidden)  # (N)
 
-        # TODO输出可能还得想着整理一下
+        price_hat = price_hidden[-1, :].squeeze()
+        delta_hat = delta_hidden[-1, :].squeeze()
         return price_hat, delta_hat

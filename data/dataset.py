@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from torch.utils.data import Dataset
 
 from monte_carlo.monte_carlo import simulate
@@ -14,7 +15,7 @@ class OptionDataset(Dataset):
         super().__init__()
 
         self.data = []
-        for sample in data:
+        for i, sample in enumerate(data):
             S_0 = np.array(sample["S_0"])
             mu = np.array(sample["mu"])
             sigma = np.array(sample["sigma"])
@@ -30,9 +31,14 @@ class OptionDataset(Dataset):
                 simulated = simulate(S_0, mu, sigma, rho, D, N, T)
                 option_payoff = np.apply_along_axis(option, 0, simulated)
                 simulated = np.vstack((simulated, option_payoff))
+                # We predict from the fture to the present
+                # So the simulation has to be flipped
+                simulated = np.flip(simulated)
                 simulated_data.append(simulated)
-            simulated_data = np.array(simulated_data)
+            simulated_data = torch.tensor(np.array(simulated_data)).float()
             self.data.append((simulated_data, sample["r"], option_prices))
+            print(f"Sample {i} is added.")
+        print("Dataset built.")
 
     def __len__(self):
         return len(self.data)
@@ -44,19 +50,19 @@ class OptionDataset(Dataset):
 def simulate_option(option, S_real, mu, sigma, rho, T, N, M, r) -> OptionDataset:
     data = []
     for n in range(N):
-        S = S_real[:,n]
+        S = S_real[:, n]
         sample = {
             "S_0": S,
             "mu": mu,
             "sigma": sigma,
             "rho": rho,
-            "option_prices": range(1,N+1),
+            "option_prices": range(1, N + 1),
             "r": r,
             "T": T,
         }
         data.append(sample)
     return OptionDataset(data, option, M)
-    
+
 
 if __name__ == "__main__":
     option = lambda S: max(0, S[0] - S[1])
@@ -64,7 +70,7 @@ if __name__ == "__main__":
     D = 2
     N = 10
     M = 15
-    S_real = np.array(np.random.rand(D,N))*10
+    S_real = np.array(np.random.rand(D, N)) * 10
     mu = np.array([0.5, 1.0])
     sigma = np.array([1.0, 4.0])
     rho = np.array([[1.0, 0.0], [0.0, 1.0]])
