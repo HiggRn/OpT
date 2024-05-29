@@ -1,4 +1,3 @@
-# Construct the dataset for training
 import numpy as np
 from torch.utils.data import Dataset
 
@@ -42,20 +41,32 @@ class OptionDataset(Dataset):
         return self.data[index]
 
 
-def simulate_option(option, S_0, mu, sigma, rho, T, N, M, r) -> OptionDataset:
-    # TODO
-    pass
-
+def simulate_option(option, S_real, mu, sigma, rho, T, N, M, r) -> OptionDataset:
+    data = []
+    for n in range(N):
+        S = S_real[:,n]
+        sample = {
+            "S_0": S,
+            "mu": mu,
+            "sigma": sigma,
+            "rho": rho,
+            "option_prices": range(1,N+1),
+            "r": r,
+            "T": T,
+        }
+        data.append(sample)
+    return OptionDataset(data, option, M)
+    
 
 if __name__ == "__main__":
-    data = {
-        "S_0": [2.0, 4.0],
-        "mu": [0.5, 1.0],
-        "sigma": [1.0, 4.0],
-        "rho": [[1.0, 0.0], [0.0, 1.0]],
-        "option_prices": range(1, 11),
-        "r": 0.05,
-        "T": 1.0,
-    }
-    test_dataset = OptionDataset([data], lambda S: max(0, S[0] - S[1]), 15)
-    print(test_dataset.data)
+    option = lambda S: max(0, S[0] - S[1])
+    T = 1.0
+    D = 2
+    N = 10
+    M = 15
+    S_real = np.array(np.random.rand(D,N))*10
+    mu = np.array([0.5, 1.0])
+    sigma = np.array([1.0, 4.0])
+    rho = np.array([[1.0, 0.0], [0.0, 1.0]])
+    r = 0.05
+    test_dataset = simulate_option(option, S_real, mu, sigma, rho, T, N, M, r)
