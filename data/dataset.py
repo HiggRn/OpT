@@ -33,7 +33,7 @@ class OptionDataset(Dataset):
                 simulated = np.vstack((simulated, option_payoff))
                 # We predict from the fture to the present
                 # So the simulation has to be flipped
-                simulated = np.flip(simulated)
+                simulated = np.flip(simulated, 1)
                 simulated_data.append(simulated)
             simulated_data = torch.tensor(np.array(simulated_data)).float()
             self.data.append((simulated_data, sample["r"], option_prices))
