@@ -31,7 +31,8 @@ def run_once(model, option, S_0, mu, sigma, rho, T, N, M, r):
     for i, data in enumerate(dataset[1:]):
         X *= 1 + r
         S = real_S[:, i + 1]  # stock price, (D)
-        V, Delta = model(data)  # V & Delta should be (1) & (D)
+        with torch.no_grad():  # same model-same prediction, same idea, no longer need to calculate gradient again
+            V, Delta = model(data)  # V & Delta should be (1) & (D)
         # option value if exercise
         V_exercise = torch.relu(option(S))
         if V < V_exercise:  # if exercise
