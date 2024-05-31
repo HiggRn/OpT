@@ -152,6 +152,7 @@ def get_args():
     parser.add_argument("-dropout", type=float, default=0.1)
     parser.add_argument("-lr", type=float, default=1e-3)
     parser.add_argument("-num_run", type=int, default=10)
+    parser.add_argument("-device", type=str, default='cuda')
 
     args = parser.parse_args()
     return args
