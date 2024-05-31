@@ -1,5 +1,4 @@
 import argparse
-from ast import parse
 
 import numpy as np
 import torch
@@ -16,13 +15,11 @@ def set_seed(seed=2024):
     torch.manual_seed(seed)
 
 
-def run_once(model, option, S_0, mu, sigma, rho, T, N, M, r):
-    # first simulate a real stock trajectory
-    real_S = simulate(S_0, mu, sigma, rho, len(S_0), N, T)  # (D,N)
-    real_S_tensor = torch.tensor(real_S).float()
+def run_once(model, option, real_S, mu, sigma, rho, T, N, M, r):
+    real_S_cpu = real_S.clone().detach().cpu().numpy()
 
     # then generate the dataset
-    dataset = simulate_option(option, real_S, mu, sigma, rho, T, N, M, r)
+    dataset = simulate_option(option, real_S_cpu, mu, sigma, rho, T, N, M, r)
 
     # give an initial guess
     V_0, Delta_0 = model(dataset[0][0])  # V_0 & Delta_0 should be (1) & (D)
@@ -30,29 +27,29 @@ def run_once(model, option, S_0, mu, sigma, rho, T, N, M, r):
     Delta_prev = Delta_0
 
     # delta hedge
-    X_0 = V_0 - torch.dot(Delta_0, real_S_tensor[:, 0])  # (1)
+    X_0 = V_0 - torch.dot(Delta_0, real_S[:, 0])  # (1)
     X = X_0
 
     for i, data in enumerate(dataset[1:]):
-        X *= 1 + r
-        S = real_S[:, i + 1]  # stock price, (D)
-        S_tensor = real_S_tensor[:, i + 1]
-        with torch.no_grad():  # same model-same prediction, same idea, no longer need to calculate gradient again
-            V, Delta = model(data[0])  # V & Delta should be (1) & (D)
+        X *= 1 + r / (N - 1)
+        S_cpu = real_S_cpu[:, i + 1]  # stock price, (D)
+        S = real_S[:, i + 1]
+        # with torch.no_grad():  # same model-same prediction, same idea, no longer need to calculate gradient again
+        V, Delta = model(data[0])  # V & Delta should be (1) & (D)
         # option value if exercise
-        V_exercise = torch.relu(torch.tensor(option(S)).float())
+        V_exercise = torch.relu(torch.tensor(option(S_cpu)).float())
         if V < V_exercise:  # if exercise
             X -= V_exercise
-            X += torch.dot(Delta_prev, S_tensor)
+            X += torch.dot(Delta_prev, S)
             break
-        X += torch.dot(Delta - Delta_prev, S_tensor)
+        X += torch.dot(Delta - Delta_prev, S)
         Delta_prev = Delta
 
     if i + 1 == N - 1:
+        S_cpu = real_S_cpu[:, -1]
         S = real_S[:, -1]
-        S_tensor = real_S_tensor[:, -1]
-        X -= torch.relu(torch.tensor(option(S)).float())
-        X += torch.dot(Delta, S_tensor)
+        X -= torch.relu(torch.tensor(option(S_cpu)).float())
+        X += torch.dot(Delta, S)
 
     # calculate premium
     alpha = torch.pow(X / X_0, 1 / (N - 1)) - 1 - r
@@ -75,7 +72,9 @@ def train(option, r, config, num_run):
     n_head = config["n_head"]
     dropout = config["dropout"]
 
-    model = OptionTransformer(d_model, n_layers, n_head, D, M, dropout)
+    model = OptionTransformer(d_model, n_layers, n_head, D, M, dropout).to(
+        config["device"]
+    )
 
     optimizer = optim.Adam(model.parameters(), lr=config["lr"])
 
@@ -90,12 +89,16 @@ def train(option, r, config, num_run):
         eigs *= D
         rho = random_correlation.rvs(eigs, rng)
 
+        # first simulate a real stock trajectory
+        real_S = simulate(S_0, mu, sigma, rho, len(S_0), N, T)  # (D,N)
+        real_S = torch.tensor(real_S).to(config["device"])
+
         # run once till the maturity, give back the premium
-        alpha = run_once(model, option, S_0, mu, sigma, rho, T, N, M, r)
+        alpha = run_once(model, option, real_S, mu, sigma, rho, T, N, M, r)
         print(f"Trial {n}--Premium:{alpha:6f}")
 
         # compute loss
-        criterion = nn.MSELoss()
+        criterion = nn.MSELoss().to(config["device"])
         loss = criterion(alpha, torch.tensor(0.0))
 
         # optimize model
@@ -126,8 +129,12 @@ def eval(model, option, r, config, num_run):
         eigs *= D
         rho = random_correlation.rvs(eigs, rng)
 
+        # first simulate a real stock trajectory
+        real_S = simulate(S_0, mu, sigma, rho, len(S_0), N, T)  # (D,N)
+        real_S = torch.tensor(real_S).to(config["device"])
+
         # run once till the maturity, give back the premium
-        alpha = run_once(model, option, S_0, mu, sigma, rho, T, N, M, r)
+        alpha = run_once(model, option, real_S, mu, sigma, rho, T, N, M, r)
         print(f"Trial {n}--Premium:{alpha:6f}")
 
 

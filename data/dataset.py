@@ -9,7 +9,7 @@ class OptionDataset(Dataset):
     def __init__(self, data, option, M) -> None:
         """
         :param data: list[dict{"S_0":list[float]"mu":list[float],"sigma":list[float],"rho":list[list[float]],"r":float,"T":float,"option_prices":list[float]}]
-        :param options: Callable[ndarray[float]],float], function to calculate the option payoff, given the prices of assets
+        :param option: Callable[ndarray[float]],float], function to calculate the option payoff, given the prices of assets
         :param M: int, number of Monte-Carlo simulations
         """
         super().__init__()
@@ -37,7 +37,8 @@ class OptionDataset(Dataset):
                 simulated_data.append(simulated)
             simulated_data = torch.tensor(np.array(simulated_data)).float()
             self.data.append((simulated_data, sample["r"], option_prices))
-            print(f"Sample {i} is added.")
+            if (i + 1) % 100 == 0:
+                print(f"Sample {i+1} is added.")
         print("Dataset built.")
 
     def __len__(self):

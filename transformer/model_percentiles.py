@@ -20,6 +20,9 @@ class OptionTransformer(nn.Module):
         self.n_assets = n_assets  # 即是D
         self.n_mcmc = n_mcmc  # 即是M
 
+        # 先归一化
+        self.norm = nn.BatchNorm1d(n_features)
+
         # 然后Transformer: Encoder only，输出(N,h*n*D)
         encoder_layers = nn.TransformerEncoderLayer(
             d_model=n_features * (n_assets + 1),
@@ -63,7 +66,8 @@ class OptionTransformer(nn.Module):
         q /= self.n_mcmc  # calculate quantiles
         X_quantiles = torch.quantile(X, q, dim=2, keepdim=False)  # (n,N,D)
         X_quantiles = torch.transpose(X_quantiles, 0, 1)  # (N,n,D)
-        X_input = torch.flatten(X_quantiles, 1, 2)  # (N,n*D)
+        X_norm = self.norm(X_quantiles)
+        X_input = torch.flatten(X_norm, 1, 2)  # (N,n*D)
 
         # 再transformer
         # TODO不知道是否需要mask
