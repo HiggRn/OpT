@@ -16,9 +16,6 @@ def set_seed(seed=2024):
 
 
 def run_once(model, option, real_S, mu, sigma, rho, T, N, M, r):
-    real_S_log = torch.log(real_S)
-    real_S_log_std = (real_S_log - torch.mean(real_S_log, 0)) / torch.std(real_S_log, 0)
-    real_S = torch.exp(real_S_log_std)
     real_S_cpu = real_S.detach().clone().cpu().numpy()
 
     # then generate the dataset
@@ -26,6 +23,9 @@ def run_once(model, option, real_S, mu, sigma, rho, T, N, M, r):
 
     # give an initial guess
     V_0, Delta_0 = model(dataset[0][0])  # V_0 & Delta_0 should be (1) & (D)
+
+    if V_0 < torch.relu(torch.tensor(option(real_S_cpu[:, 0]))):
+        return -torch.inf
 
     Delta_prev = Delta_0
 
@@ -54,16 +54,13 @@ def run_once(model, option, real_S, mu, sigma, rho, T, N, M, r):
         X -= torch.relu(torch.tensor(option(S_cpu)).float())
         X += torch.dot(Delta, S)
 
-    # calculate premium
-    alpha = torch.pow(X / X_0, 1 / (N - 1)) - 1 - r
+    # calculate return
+    alpha = X / X_0 - 1
     return alpha
 
 
 def run_dual(model1, model2, option, real_S, mu, sigma, rho, T, N, M, r):
     # Suppose we use model1 as the seller, model2 as the buyer
-    real_S_log = torch.log(real_S)
-    real_S_log_std = (real_S_log - torch.mean(real_S_log, 0)) / torch.std(real_S_log, 0)
-    real_S = torch.exp(real_S_log_std)
     real_S_cpu = real_S.detach().clone().cpu().numpy()
 
     # then generate the dataset
@@ -79,6 +76,9 @@ def run_dual(model1, model2, option, real_S, mu, sigma, rho, T, N, M, r):
     # delta hedge
     # suppose in the end V_0 is the average
     V_0 = 0.5 * (V_0_1 + V_0_2)
+
+    if V_0 < torch.relu(torch.tensor(option(real_S_cpu[:, 0]))):
+        return -torch.inf, torch.inf
 
     X_0_1 = V_0 - torch.dot(Delta_0_1, real_S[:, 0])  # (1)
     X_0_2 = -V_0 + torch.dot(Delta_0_2, real_S[:, 0])  # (1)
@@ -121,8 +121,8 @@ def run_dual(model1, model2, option, real_S, mu, sigma, rho, T, N, M, r):
 
     # calculate return
     print(f"End--Seller:{X_1:6f}, Buyer:{X_2:6f}")
-    alpha_1 = X_1 / X_0_1 - 1
-    alpha_2 = X_2 / X_0_2 - 1
+    alpha_1 = (X_1 / X_0_1 - 1) * torch.sign(X_0_1)
+    alpha_2 = (X_2 / X_0_2 - 1) * torch.sign(X_0_2)
     return alpha_1, alpha_2
 
 
