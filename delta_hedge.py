@@ -16,7 +16,10 @@ def set_seed(seed=2024):
 
 
 def run_once(model, option, real_S, mu, sigma, rho, T, N, M, r):
-    real_S_cpu = real_S.clone().detach().cpu().numpy()
+    real_S_log = torch.log(real_S)
+    real_S_log_std = (real_S_log - torch.mean(real_S_log, 0)) / torch.std(real_S_log, 0)
+    real_S = torch.exp(real_S_log_std)
+    real_S_cpu = real_S.detach().clone().cpu().numpy()
 
     # then generate the dataset
     dataset = simulate_option(option, real_S_cpu, mu, sigma, rho, T, N, M, r)
@@ -28,7 +31,7 @@ def run_once(model, option, real_S, mu, sigma, rho, T, N, M, r):
 
     # delta hedge
     X_0 = V_0 - torch.dot(Delta_0, real_S[:, 0])  # (1)
-    X = X_0
+    X = X_0.detach().clone()
 
     for i, data in enumerate(dataset[1:]):
         X *= 1 + r
@@ -61,7 +64,7 @@ def run_dual(model1, model2, option, real_S, mu, sigma, rho, T, N, M, r):
     real_S_log = torch.log(real_S)
     real_S_log_std = (real_S_log - torch.mean(real_S_log, 0)) / torch.std(real_S_log, 0)
     real_S = torch.exp(real_S_log_std)
-    real_S_cpu = real_S.clone().detach().cpu().numpy()
+    real_S_cpu = real_S.detach().clone().cpu().numpy()
 
     # then generate the dataset
     dataset = simulate_option(option, real_S_cpu, mu, sigma, rho, T, N, M, r)
