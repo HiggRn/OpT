@@ -57,7 +57,7 @@ def simulate_option(option, S_real, mu, sigma, rho, T, N, M, r) -> OptionDataset
             "mu": mu,
             "sigma": sigma,
             "rho": rho,
-            "option_prices": range(1, N + 1),
+            "option_prices": range(1, N + 1 - n),
             "r": r,
             "T": T,
         }
