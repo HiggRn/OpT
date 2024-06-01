@@ -26,7 +26,7 @@ def simulate(S_0, mu, sigma, rho, D, N, T):
     S_simlated = np.zeros((D, N))
     S_simlated[:, 0] = S_0
     for n in range(1, N):
-        S_simlated[:, n] = (1 + mu) * S_simlated[:, n - 1] * delta_t
+        S_simlated[:, n] = (1 + mu * delta_t) * S_simlated[:, n - 1]
         S_simlated[:, n] += sigma * S_simlated[:, n - 1] * Delta_W[:, n - 1]
 
     return S_simlated
