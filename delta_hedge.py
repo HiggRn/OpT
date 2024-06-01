@@ -31,7 +31,7 @@ def run_once(model, option, real_S, mu, sigma, rho, T, N, M, r):
     X = X_0
 
     for i, data in enumerate(dataset[1:]):
-        X *= 1 + r / (N - 1)
+        X *= 1 + r
         S_cpu = real_S_cpu[:, i + 1]  # stock price, (D)
         S = real_S[:, i + 1]
         # with torch.no_grad():  # same model-same prediction, same idea, no longer need to calculate gradient again
@@ -54,6 +54,73 @@ def run_once(model, option, real_S, mu, sigma, rho, T, N, M, r):
     # calculate premium
     alpha = torch.pow(X / X_0, 1 / (N - 1)) - 1 - r
     return alpha
+
+
+def run_dual(model1, model2, option, real_S, mu, sigma, rho, T, N, M, r):
+    # Suppose we use model1 as the seller, model2 as the buyer
+    real_S_log = torch.log(real_S)
+    real_S_log_std = (real_S_log - torch.mean(real_S_log, 0)) / torch.std(real_S_log, 0)
+    real_S = torch.exp(real_S_log_std)
+    real_S_cpu = real_S.clone().detach().cpu().numpy()
+
+    # then generate the dataset
+    dataset = simulate_option(option, real_S_cpu, mu, sigma, rho, T, N, M, r)
+
+    # give an initial guess
+    V_0_1, Delta_0_1 = model1(dataset[0][0])  # V_0 & Delta_0 should be (1) & (D)
+    V_0_2, Delta_0_2 = model2(dataset[0][0])
+
+    Delta_prev_1 = Delta_0_1
+    Delta_prev_2 = Delta_0_2
+
+    # delta hedge
+    # suppose in the end V_0 is the average
+    V_0 = 0.5 * (V_0_1 + V_0_2)
+
+    X_0_1 = V_0 - torch.dot(Delta_0_1, real_S[:, 0])  # (1)
+    X_0_2 = -V_0 + torch.dot(Delta_0_2, real_S[:, 0])  # (1)
+    X_1 = X_0_1.detach().clone()
+    X_2 = X_0_2.detach().clone()
+    print(f"Start--Seller:{X_1:6f}, Buyer:{X_2:6f}")
+    print(f"Price:{V_0}")
+
+    for i, data in enumerate(dataset[1:]):
+        X_1 *= 1 + r
+        X_2 *= 1 + r
+        S_cpu = real_S_cpu[:, i + 1]  # stock price, (D)
+        S = real_S[:, i + 1]
+        # with torch.no_grad():  # same model-same prediction, same idea, no longer need to calculate gradient again
+        _, Delta_1 = model1(data[0])  # V & Delta should be (1) & (D)
+        V, Delta_2 = model2(data[0])  # V & Delta should be (1) & (D)
+        # option value if exercise
+        V_exercise = torch.relu(torch.tensor(option(S_cpu)).float())
+        if V < V_exercise:  # if exercise
+            X_1 -= V_exercise
+            X_1 += torch.dot(Delta_prev_1, S)
+            X_2 += V_exercise
+            X_2 -= torch.dot(Delta_prev_2, S)
+            print(f"Exercised at t={i+1}")
+            break
+        # update delta hedge
+        X_1 += torch.dot(Delta_1 - Delta_prev_1, S)
+        X_2 -= torch.dot(Delta_2 - Delta_prev_2, S)
+
+        Delta_prev_1 = Delta_1
+        Delta_prev_2 = Delta_2
+
+    if i + 1 == N - 1:
+        S_cpu = real_S_cpu[:, -1]
+        S = real_S[:, -1]
+        X_1 -= torch.relu(torch.tensor(option(S_cpu)).float())
+        X_2 += torch.relu(torch.tensor(option(S_cpu)).float())
+        X_1 += torch.dot(Delta_1, S)
+        X_2 -= torch.dot(Delta_2, S)
+
+    # calculate return
+    print(f"End--Seller:{X_1:6f}, Buyer:{X_2:6f}")
+    alpha_1 = X_1 / X_0_1 - 1
+    alpha_2 = X_2 / X_0_2 - 1
+    return alpha_1, alpha_2
 
 
 def train(option, r, config, num_run):
@@ -152,7 +219,7 @@ def get_args():
     parser.add_argument("-dropout", type=float, default=0.1)
     parser.add_argument("-lr", type=float, default=1e-3)
     parser.add_argument("-num_run", type=int, default=10)
-    parser.add_argument("-device", type=str, default='cuda')
+    parser.add_argument("-device", type=str, default="cuda")
 
     args = parser.parse_args()
     return args
