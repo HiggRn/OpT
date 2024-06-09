@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-# 输入数据X:(D,N,M)，其中N表示期限，M表示Monte Carlo模拟次数，D为资产数（包含期权的模拟收益）
+# 输入数据X:(N,D,M)，其中N表示期限，M表示Monte Carlo模拟次数，D为资产数（包含期权的模拟收益）
 class OptionTransformer(nn.Module):
     def __init__(
         self, d_model, n_layers, n_head, n_assets, n_mcmc, dropout, n_features=100
@@ -57,12 +57,12 @@ class OptionTransformer(nn.Module):
             elif "bias" in name:
                 nn.init.constant_(param, 0)
 
-    def forward(self, X, mask=None):
+    def forward(self, X, mask=None, device="cpu"):
         # Zhang Yuxiang, 2024/5/26
         # 先对M维度上的数据排序，然后取百分位数
         # Zijie Gu, 2024/5/26
         # Modified using torch.quantile()
-        q = torch.linspace(0, self.n_mcmc - 1, steps=self.n_features)
+        q = torch.linspace(0, self.n_mcmc - 1, steps=self.n_features).to(device)
         q /= self.n_mcmc  # calculate quantiles
         X_quantiles = torch.quantile(X, q, dim=2, keepdim=False)  # (n,N,D)
         X_quantiles = torch.transpose(X_quantiles, 0, 1)  # (N,n,D)
